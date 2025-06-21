@@ -2,6 +2,9 @@ package com.tienda.services;
 
 import com.tienda.models.Personal;
 import com.tienda.repositories.PersonalRepository;
+
+import jakarta.transaction.Transactional;
+
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -40,11 +43,21 @@ public class PersonalService {
     }
 
     // Puedes añadir métodos para actualizar solo ciertos campos, buscar por usuario, etc.
+    @Transactional
     public Optional<Personal> updatePersonal(Long id, Personal personalDetails) {
         return personalRepository.findById(id).map(personal -> {
+            // Actualizar campos que siempre se envían o que el usuario puede cambiar
             personal.setUsuario(personalDetails.getUsuario());
-            personal.setContrasena(personalDetails.getContrasena()); // Cuidado aquí, encriptar en un sistema real
             personal.setRol(personalDetails.getRol());
+
+            // *** Lógica clave para la contraseña: solo actualizar si se proporciona ***
+            // Si personalDetails.getContrasena() no es null y no está vacío, encriptar y actualizar
+            if (personalDetails.getContrasena() != null && !personalDetails.getContrasena().isEmpty()) {
+                personal.setContrasena(passwordEncoder.encode(personalDetails.getContrasena()));
+            }
+            // Si personalDetails.getContrasena() es null o vacío, la contraseña existente se mantiene
+            // Hibernate no incluirá este campo en la sentencia UPDATE si no se modifica
+
             return personalRepository.save(personal);
         });
     }

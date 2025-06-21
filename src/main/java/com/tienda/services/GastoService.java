@@ -4,6 +4,7 @@ import com.tienda.models.Gasto;
 import com.tienda.repositories.GastoRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -34,10 +35,11 @@ public class GastoService {
         gastoRepository.deleteById(id);
     }
 
+    @Transactional
     public Optional<Gasto> updateGasto(Long id, Gasto gastoDetails) {
         return gastoRepository.findById(id).map(gasto -> {
             gasto.setDescripcion(gastoDetails.getDescripcion());
-            gasto.setCosto(gastoDetails.getCosto());
+            gasto.setMonto(gastoDetails.getMonto());
             gasto.setFecha(gastoDetails.getFecha());
             return gastoRepository.save(gasto);
         });

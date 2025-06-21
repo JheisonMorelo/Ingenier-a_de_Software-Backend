@@ -1,6 +1,7 @@
 package com.tienda.controllers;
 
 
+import com.tienda.dto.ProductoDTO;
 import com.tienda.models.Producto;
 import com.tienda.services.ProductoService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -19,8 +20,8 @@ public class ProductoController {
     private ProductoService productoService;
 
     @GetMapping
-    public List<Producto> getAllProductos() {
-        return productoService.getAllProductos();
+    public List<ProductoDTO> getAllProductos() {
+        return productoService.getAllProductosDTO();
     }
 
     @GetMapping("/{id}")

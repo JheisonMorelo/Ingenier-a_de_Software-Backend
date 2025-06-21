@@ -1,98 +1,114 @@
+// src/main/java/com/tienda/controllers/VentaController.java
 package com.tienda.controllers;
 
-
-import com.tienda.dto.VentaReporteDTO;
-import com.tienda.models.Venta;
+import com.tienda.dto.VentaRequestDTO;
+import com.tienda.dto.VentaResponseDTO;
 import com.tienda.services.VentaService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.http.HttpHeaders; // Para Content-Disposition
-import com.tienda.reports.ReportGeneratorService; // Importar ReportGeneratorService
+import jakarta.validation.Valid; // Para la validación de DTOs
 
 import java.math.BigDecimal;
 import java.util.List;
 
 @RestController
 @RequestMapping("/api/ventas")
-@CrossOrigin(origins = "http://localhost:4200")
+@CrossOrigin(origins = "http://localhost:4200") // Asegúrate que tu frontend Angular pueda acceder
 public class VentaController {
 
     @Autowired
     private VentaService ventaService;
 
-    @Autowired
-    private ReportGeneratorService reportGeneratorService; // Inyectar el nuevo servicio
-
+    /**
+     * Obtiene todas las ventas.
+     * @return Una lista de VentaResponseDTO.
+     */
     @GetMapping
-    public List<Venta> getAllVentas() {
-        return ventaService.getAllVentas();
+    public ResponseEntity<List<VentaResponseDTO>> getAllVentas() {
+        List<VentaResponseDTO> ventas = ventaService.getAllVentas();
+        return ResponseEntity.ok(ventas);
     }
 
+    /**
+     * Obtiene una venta por su ID.
+     * @param id El ID de la venta.
+     * @return Un ResponseEntity con el VentaResponseDTO o un 404 Not Found.
+     */
     @GetMapping("/{id}")
-    public ResponseEntity<Venta> getVentaById(@PathVariable Long id) {
+    public ResponseEntity<VentaResponseDTO> getVentaById(@PathVariable Long id) {
         return ventaService.getVentaById(id)
                 .map(ResponseEntity::ok)
                 .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
-    @GetMapping("/ganancias")
-    public ResponseEntity<List<Venta>> getVentasForProfit() {
-        List<Venta> ventasGanancia = ventaService.getVentasForProfitCalculation();
-        return ResponseEntity.ok(ventasGanancia);
-    }
-
-    @GetMapping("/ganancias/total")
-    public ResponseEntity<BigDecimal> getTotalProfit() {
-        BigDecimal totalProfit = ventaService.calculateTotalProfit();
-        return ResponseEntity.ok(totalProfit);
-    }
-
+    /**
+     * Crea una nueva venta.
+     * @param ventaDto El DTO con los datos de la venta.
+     * @return Un ResponseEntity con el VentaResponseDTO de la venta creada o un error 400 Bad Request/404 Not Found.
+     */
     @PostMapping
-    public ResponseEntity<Object> createVenta(@RequestBody Venta venta) {
+    public ResponseEntity<Object> createVenta(@Valid @RequestBody VentaRequestDTO ventaDto) {
         try {
-            Venta savedVenta = ventaService.createVenta(venta);
+            VentaResponseDTO savedVenta = ventaService.createVenta(ventaDto);
             return new ResponseEntity<>(savedVenta, HttpStatus.CREATED);
-        } catch (RuntimeException e) {
+        } catch (IllegalArgumentException e) {
+            // Errores de validación como ID de producto nulo o cantidad <= 0
             return new ResponseEntity<>(e.getMessage(), HttpStatus.BAD_REQUEST);
+        } catch (RuntimeException e) {
+            // Errores como producto no encontrado o stock insuficiente
+            return new ResponseEntity<>(e.getMessage(), HttpStatus.NOT_FOUND); // Podría ser 400 Bad Request también
         }
     }
 
+    /**
+     * Actualiza una venta existente.
+     * Nota: Este método solo actualiza los campos de la cabecera de la venta.
+     * La lógica de actualización de los detalles de productos en una venta es compleja y no se incluye aquí directamente.
+     * @param id El ID de la venta a actualizar.
+     * @param ventaDetails El DTO con los datos a actualizar.
+     * @return Un ResponseEntity con el VentaResponseDTO actualizado o un 404 Not Found.
+     */
     @PutMapping("/{id}")
-    public ResponseEntity<Venta> updateVenta(@PathVariable Long id, @RequestBody Venta ventaDetails) {
+    public ResponseEntity<VentaResponseDTO> updateVenta(@PathVariable Long id, @RequestBody VentaRequestDTO ventaDetails) {
         return ventaService.updateVenta(id, ventaDetails)
                 .map(ResponseEntity::ok)
                 .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
+    /**
+     * Elimina una venta y revierte el stock de los productos.
+     * @param id El ID de la venta a eliminar.
+     * @return Un ResponseEntity con 204 No Content si la eliminación es exitosa o un 404 Not Found.
+     */
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteVenta(@PathVariable Long id) {
         try {
             ventaService.deleteVenta(id);
             return ResponseEntity.noContent().build();
-        } catch (Exception e) {
-            return ResponseEntity.notFound().build(); // O un HttpStatus.INTERNAL_SERVER_ERROR si el error es otro
+        } catch (RuntimeException e) {
+            return ResponseEntity.notFound().build(); // Venta no encontrada
         }
     }
 
-    // NUEVO ENDPOINT: Descargar el informe general de ventas en CSV
-    @GetMapping("/reporte/general-ventas/csv")
-    public ResponseEntity<String> getGeneralSalesReportCsv() {
-        try {
-            List<VentaReporteDTO> ventasData = ventaService.getGeneralSalesReportData();
-            String csvContent = reportGeneratorService.generateVentasCsv(ventasData);
+    /**
+     * Obtiene una lista de ventas pagadas para el cálculo de ganancias.
+     * @return Una lista de VentaResponseDTO de ventas pagadas.
+     */
+    @GetMapping("/ganancias")
+    public ResponseEntity<List<VentaResponseDTO>> getVentasForProfit() {
+        List<VentaResponseDTO> ventasGanancia = ventaService.getVentasForProfitCalculation();
+        return ResponseEntity.ok(ventasGanancia);
+    }
 
-            HttpHeaders headers = new HttpHeaders();
-            // Configurar el Content-Disposition para que el navegador descargue el archivo
-            headers.add(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=informe_general_ventas.csv");
-            // Configurar el Content-Type para indicar que es un archivo CSV
-            headers.add(HttpHeaders.CONTENT_TYPE, "text/csv");
-
-            return new ResponseEntity<>(csvContent, headers, HttpStatus.OK);
-        } catch (Exception e) {
-            // Manejar cualquier error en la generación del reporte
-            return new ResponseEntity<>("Error al generar el informe CSV: " + e.getMessage(), HttpStatus.INTERNAL_SERVER_ERROR);
-        }
+    /**
+     * Calcula el total de ganancias de todas las ventas pagadas.
+     * @return Un ResponseEntity con el BigDecimal del total de ganancias.
+     */
+    @GetMapping("/ganancias/total")
+    public ResponseEntity<BigDecimal> getTotalProfit() {
+        BigDecimal totalProfit = ventaService.calculateTotalProfit();
+        return ResponseEntity.ok(totalProfit);
     }
 }

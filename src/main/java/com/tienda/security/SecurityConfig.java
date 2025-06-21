@@ -1,8 +1,14 @@
 package com.tienda.security;
 
+import java.util.List;
+import java.util.stream.Collectors;
+
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.tienda.dto.AuthResponse;
+import com.tienda.dto.MessageResponse;
+
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
@@ -10,6 +16,7 @@ import org.springframework.security.config.annotation.authentication.configurati
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity; // Para seguridad a nivel de método
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder; // Para encriptar contraseñas
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
@@ -78,31 +85,51 @@ public class SecurityConfig {
                     response.setContentType("application/json"); // Configura el tipo de contenido
                     response.setCharacterEncoding("UTF-8"); // Configura la codificación
                     // Escribe la respuesta JSON
-                    response.getWriter().write(objectMapper.writeValueAsString("Acceso no autorizado. Por favor, inicie sesión."));
+                    response.getWriter().write(objectMapper.writeValueAsString(new MessageResponse("Acceso no autorizado. Por favor, inicie sesión.")));
                 })
             )
             .formLogin(form -> form
                 .loginProcessingUrl("/api/auth/login") // URL donde el frontend enviará POST para login
                 .successHandler((request, response, authentication) -> {
+
+                    String username = authentication.getName();
+                    List<String> roles = authentication.getAuthorities().stream()
+                            .map(GrantedAuthority::getAuthority)
+                            .map(role -> role.replace("ROLE_", ""))
+                            .collect(Collectors.toList());
+
+                    // Se crea una instancia de AuthResponse con los datos del usuario autenticado
+                    // y se serializa a JSON para la respuesta HTTP 200 OK.
+                    AuthResponse authResponse = new AuthResponse("Login exitoso", username, roles);
+
                     response.setStatus(HttpServletResponse.SC_OK);
                     response.setContentType("application/json");
                     response.setCharacterEncoding("UTF-8");
-                    response.getWriter().write(objectMapper.writeValueAsString("Login exitoso"));
+                    response.getWriter().write(objectMapper.writeValueAsString(authResponse));
                 })
                 // Manejador de fallo inline
                 .failureHandler((request, response, exception) -> {
+                    String errorMessage = "Credenciales inválidas."; 
+                    MessageResponse errorResponse = new MessageResponse(errorMessage);
                     response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
                     response.setContentType("application/json");
                     response.setCharacterEncoding("UTF-8");
-                    response.getWriter().write(objectMapper.writeValueAsString("Login Fallido"));
+                    response.getWriter().write(objectMapper.writeValueAsString(errorResponse));
                 }).permitAll() // Permitir acceso a la URL de procesamiento de login
             )
             // Configuración de logout
             .logout(logout -> logout
-                .logoutUrl("/api/auth/logout") // URL donde el frontend enviará POST para logout
-                .invalidateHttpSession(true) // Invalidar la sesión HTTP
-                .deleteCookies("JSESSIONID") // Eliminar la cookie de sesión
-                .permitAll() // Permitir acceso a la URL de logout
+                .logoutUrl("/api/auth/logout")
+                .invalidateHttpSession(true)
+                .deleteCookies("JSESSIONID")
+                .logoutSuccessHandler((request, response, authentication) -> { // <--- NUEVO LogoutSuccessHandler
+                    // Este handler se ejecuta DESPUÉS de un logout exitoso (sesión invalidada)
+                    response.setStatus(HttpServletResponse.SC_OK);
+                    response.setContentType("application/json");
+                    response.setCharacterEncoding("UTF-8");
+                    response.getWriter().write(objectMapper.writeValueAsString(new MessageResponse("Sesión cerrada exitosamente.")));
+                })
+                .permitAll() // Asegura que el endpoint /api/auth/logout sea accesible sin autenticación
             );
 
         // Añade el proveedor de autenticación

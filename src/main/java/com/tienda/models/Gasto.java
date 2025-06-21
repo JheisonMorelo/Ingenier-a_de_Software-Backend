@@ -23,7 +23,7 @@ public class Gasto {
     private String descripcion;
 
     @Column(name = "costo", nullable = false, precision = 10, scale = 2)
-    private BigDecimal costo;
+    private BigDecimal monto;
 
     @Column(name = "fecha", nullable = false)
     private LocalDate fecha;

@@ -1,15 +1,21 @@
 package com.tienda.services;
 
+import com.tienda.dto.ProductoDTO;
+import com.tienda.dto.ProveedorDTO;
 import com.tienda.models.Producto;
 import com.tienda.models.Proveedor;
 import com.tienda.repositories.ProductoRepository;
 import com.tienda.repositories.ProveedorRepository;
+
+import jakarta.transaction.Transactional;
+
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 @Service
 public class ProductoService {
@@ -19,6 +25,54 @@ public class ProductoService {
 
     @Autowired
     private ProveedorRepository proveedorRepository; // Para asociar el producto a un proveedor
+
+    
+    /**
+     * Convierte una entidad Producto a un ProductoDTO.
+     * @param producto La entidad Producto.
+     * @return El ProductoDTO correspondiente.
+     */
+    private ProductoDTO convertToDto(Producto producto) {
+        ProveedorDTO proveedorDTO = null;
+        if (producto.getProveedor() != null) {
+            // Cargar el proveedor completo si es LAZY y necesitas sus detalles para el DTO
+            // Asegúrate de que esta operación se haga dentro de una transacción activa
+            // o que el fetch type sea EAGER para este caso si siempre lo necesitas.
+            // Con LAZY, si no se carga aquí, el proxy aún podría causar problemas.
+            // Una opción más robusta para LAZY es usar un DTO de creación/actualización con solo el ID del proveedor.
+            // Para "getAllProductos", si quieres la info completa, podrías hacer un fetch join en el repo.
+            
+            // Para simplificar aquí, asumiremos que el proveedor ya está inicializado o que Spring/Hibernate lo maneja
+            // al acceder a sus propiedades, o que el fetch type para esta relación en Producto.java es EAGER.
+            // Si tu @ManyToOne es FetchType.LAZY y no hay una transacción abierta para inicializarlo,
+            // esta línea podría lanzar LazyInitializationException.
+            // Si la LazyInitializationException ocurre, considera:
+            // 1. Cambiar `fetch = FetchType.EAGER` en la relación `@ManyToOne` en `Producto.java` para el `proveedor`.
+            // 2. Usar un fetch join en el repositorio: `findBy...` con `@EntityGraph` o en una JPQL.
+            // 3. Obtener el proveedor por ID aquí para asegurar que está cargado.
+            // Por ahora, lo mantenemos simple asumiendo que se carga:
+            proveedorDTO = new ProveedorDTO(
+                producto.getProveedor().getId(),
+                producto.getProveedor().getNombre(),
+                producto.getProveedor().getTelefono()
+            );
+        }
+        return new ProductoDTO(
+            producto.getId(),
+            producto.getNombre(),
+            producto.getPrecio(),
+            producto.getStock(),
+            producto.getUnidad(),
+            proveedorDTO
+        );
+    }
+    
+    @Transactional 
+    public List<ProductoDTO> getAllProductosDTO() {
+        return productoRepository.findAll().stream()
+                .map(this::convertToDto)
+                .collect(Collectors.toList());
+    }
 
     public List<Producto> getAllProductos() {
         return productoRepository.findAll();
